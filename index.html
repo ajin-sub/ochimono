@@ -2,65 +2,21 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>Tetris Touch</title>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>Tetris</title>
 <style>
-  html, body {
-    margin: 0; padding: 0;
-    background: #111;
-    color: #eee;
-    height: 100%;
-    overflow: hidden;
-    touch-action: none;
-    -webkit-user-select: none; user-select: none;
-    font-family: system-ui, sans-serif;
-  }
-  #wrap {
-    position: fixed;
-    inset: 0;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-  }
-  #hud {
-    width: 100%;
-    max-width: 360px;
-    display: flex;
-    justify-content: space-between;
-    padding: 6px 10px;
-    box-sizing: border-box;
-    font-size: 14px;
-    opacity: 0.9;
-  }
-  #game {
-    display: block;
-    background: #000;
-    border: 1px solid #333;
-    touch-action: none;
-  }
-  #msg {
-    position: fixed;
-    inset: 0;
-    display: none;
-    align-items: center;
-    justify-content: center;
-    flex-direction: column;
-    background: rgba(0,0,0,0.75);
-    color: #fff;
-    font-size: 22px;
-    text-align: center;
-    z-index: 10;
-  }
-  #msg button {
-    margin-top: 16px;
-    padding: 12px 24px;
-    font-size: 18px;
-    border-radius: 10px;
-    border: 1px solid #666;
-    background: #222;
-    color: #fff;
-  }
+  html,body{margin:0;padding:0;height:100%;background:#111;color:#eee;
+    font-family:system-ui,sans-serif;overflow:hidden;touch-action:none;
+    -webkit-user-select:none;user-select:none;}
+  #wrap{position:fixed;inset:0;display:flex;flex-direction:column;
+    align-items:center;justify-content:center;}
+  #hud{width:100%;max-width:360px;display:flex;justify-content:space-between;
+    padding:6px 10px;box-sizing:border-box;font-size:14px;}
+  canvas{display:block;background:#000;border:1px solid #333;touch-action:none;}
+  #msg{position:fixed;inset:0;display:none;align-items:center;justify-content:center;
+    flex-direction:column;background:rgba(0,0,0,.8);z-index:10;font-size:22px;}
+  #msg button{margin-top:16px;padding:12px 24px;font-size:18px;border-radius:10px;
+    border:1px solid #666;background:#222;color:#fff;}
 </style>
 </head>
 <body>
@@ -80,161 +36,117 @@
 (function(){
   "use strict";
 
-  // ===== 基本設定 =====
-  const COLS = 10;
-  const ROWS = 20;
-  const BLOCK = 0; // 描画時に決定
+  var COLS = 10, ROWS = 20;
+  var canvas = document.getElementById('game');
+  var ctx = canvas.getContext('2d');
+  var scoreEl = document.getElementById('score');
+  var linesEl = document.getElementById('lines');
+  var msgEl = document.getElementById('msg');
+  var msgTextEl = document.getElementById('msgText');
+  var restartBtn = document.getElementById('restart');
 
-  const canvas = document.getElementById('game');
-  const ctx = canvas.getContext('2d');
-  const scoreEl = document.getElementById('score');
-  const linesEl = document.getElementById('lines');
-  const msgEl = document.getElementById('msg');
-  const msgTextEl = document.getElementById('msgText');
-  const restartBtn = document.getElementById('restart');
+  var blockSize = 16;
+  var board = [];
+  var piece = null;
+  var nextType = null;
+  var dropTimer = 0;
+  var dropInterval = 800;
+  var lastTime = 0;
+  var score = 0, linesCleared = 0;
+  var gameOver = false;
+  var softDrop = false;
 
-  let blockSize = 16;
-  let board = [];
-  let piece = null;
-  let nextPieceType = null;
-  let dropTimer = 0;
-  let dropInterval = 800; // ms
-  let lastTime = 0;
-  let score = 0;
-  let linesCleared = 0;
-  let gameOver = false;
-  let softDropActive = false;
-  let softDropTimer = 0;
-
-  // ミノ定義（SRS簡易版）
-  const SHAPES = {
-    I: [[0,0,0,0],
-        [1,1,1,1],
-        [0,0,0,0],
-        [0,0,0,0]],
-    O: [[1,1],
-        [1,1]],
-    T: [[0,1,0],
-        [1,1,1],
-        [0,0,0]],
-    S: [[0,1,1],
-        [1,1,0],
-        [0,0,0]],
-    Z: [[1,1,0],
-        [0,1,1],
-        [0,0,0]],
-    J: [[1,0,0],
-        [1,1,1],
-        [0,0,0]],
-    L: [[0,0,1],
-        [1,1,1],
-        [0,0,0]]
+  var SHAPES = {
+    I: [[0,0,0,0],[1,1,1,1],[0,0,0,0],[0,0,0,0]],
+    O: [[1,1],[1,1]],
+    T: [[0,1,0],[1,1,1],[0,0,0]],
+    S: [[0,1,1],[1,1,0],[0,0,0]],
+    Z: [[1,1,0],[0,1,1],[0,0,0]],
+    J: [[1,0,0],[1,1,1],[0,0,0]],
+    L: [[0,0,1],[1,1,1],[0,0,0]]
   };
-  const COLORS = {
-    I: '#00f0f0',
-    O: '#f0f000',
-    T: '#a000f0',
-    S: '#00f000',
-    Z: '#f00000',
-    J: '#0000f0',
-    L: '#f0a000'
+  var COLORS = {
+    I:'#00f0f0', O:'#f0f000', T:'#a000f0',
+    S:'#00f000', Z:'#f00000', J:'#0000f0', L:'#f0a000'
   };
-  const TYPES = Object.keys(SHAPES);
+  var TYPES = Object.keys(SHAPES);
 
-  // ===== サイズ調整 =====
   function resize(){
-    const wrap = document.getElementById('wrap');
-    const hudH = document.getElementById('hud').offsetHeight;
-    const availW = window.innerWidth;
-    const availH = window.innerHeight - hudH - 20;
-    // 縦横比 10:20 = 1:2
-    let w = Math.min(availW - 16, 360);
-    let h = w * 2;
-    if (h > availH) {
-      h = availH;
-      w = h / 2;
-    }
+    var hudH = document.getElementById('hud').offsetHeight;
+    var availW = window.innerWidth;
+    var availH = window.innerHeight - hudH - 20;
+    var w = Math.min(availW - 16, 360);
+    var h = w * 2;
+    if (h > availH){ h = availH; w = h / 2; }
     blockSize = Math.floor(w / COLS);
-    const cw = blockSize * COLS;
-    const ch = blockSize * ROWS;
-    canvas.width = cw;
-    canvas.height = ch;
-    canvas.style.width = cw + 'px';
-    canvas.style.height = ch + 'px';
+    canvas.width  = blockSize * COLS;
+    canvas.height = blockSize * ROWS;
+    canvas.style.width  = canvas.width + 'px';
+    canvas.style.height = canvas.height + 'px';
     draw();
   }
 
-  // ===== 初期化 =====
   function initBoard(){
     board = [];
-    for (let y = 0; y < ROWS; y++){
-      board.push(new Array(COLS).fill(null));
+    for (var y=0;y<ROWS;y++){
+      var row = [];
+      for (var x=0;x<COLS;x++) row.push(null);
+      board.push(row);
     }
   }
 
   function randomType(){
-    return TYPES[Math.floor(Math.random() * TYPES.length)];
+    return TYPES[Math.floor(Math.random()*TYPES.length)];
   }
 
   function createPiece(type){
-    const shape = SHAPES[type].map(row => row.slice());
-    const p = {
+    var shape = SHAPES[type].map(function(r){return r.slice();});
+    var p = {
       type: type,
       shape: shape,
-      x: Math.floor((COLS - shape[0].length) / 2),
+      x: Math.floor((COLS - shape[0].length)/2),
       y: 0
     };
-    // 初期位置調整
     if (type === 'I') p.y = -1;
     return p;
   }
 
   function spawn(){
-    if (!nextPieceType) nextPieceType = randomType();
-    piece = createPiece(nextPieceType);
-    nextPieceType = randomType();
+    if (!nextType) nextType = randomType();
+    piece = createPiece(nextType);
+    nextType = randomType();
     if (collides(piece.shape, piece.x, piece.y)){
       gameOver = true;
       showGameOver();
     }
   }
 
-  // ===== 衝突判定 =====
   function collides(shape, px, py){
-    for (let y = 0; y < shape.length; y++){
-      for (let x = 0; x < shape[y].length; x++){
+    for (var y=0;y<shape.length;y++){
+      for (var x=0;x<shape[y].length;x++){
         if (!shape[y][x]) continue;
-        const bx = px + x;
-        const by = py + y;
-        if (bx < 0 || bx >= COLS || by >= ROWS) return true;
-        if (by < 0) continue;
+        var bx = px + x, by = py + y;
+        if (bx<0 || bx>=COLS || by>=ROWS) return true;
+        if (by<0) continue;
         if (board[by][bx]) return true;
       }
     }
     return false;
   }
 
-  // ===== 回転 =====
   function rotateMatrix(mat, dir){
-    const N = mat.length;
-    const M = mat[0].length;
-    const res = [];
+    var N = mat.length, M = mat[0].length;
+    var res = [], x, y, row;
     if (dir > 0){
-      // 右回転
-      for (let x = 0; x < M; x++){
-        const row = [];
-        for (let y = N - 1; y >= 0; y--){
-          row.push(mat[y][x]);
-        }
+      for (x=0;x<M;x++){
+        row = [];
+        for (y=N-1;y>=0;y--) row.push(mat[y][x]);
         res.push(row);
       }
     } else {
-      // 左回転
-      for (let x = M - 1; x >= 0; x--){
-        const row = [];
-        for (let y = 0; y < N; y++){
-          row.push(mat[y][x]);
-        }
+      for (x=M-1;x>=0;x--){
+        row = [];
+        for (y=0;y<N;y++) row.push(mat[y][x]);
         res.push(row);
       }
     }
@@ -243,10 +155,10 @@
 
   function tryRotate(dir){
     if (!piece || gameOver) return;
-    const rotated = rotateMatrix(piece.shape, dir);
-    // 壁蹴り（簡易）
-    const kicks = [0, -1, 1, -2, 2];
-    for (const k of kicks){
+    var rotated = rotateMatrix(piece.shape, dir);
+    var kicks = [0,-1,1,-2,2];
+    for (var i=0;i<kicks.length;i++){
+      var k = kicks[i];
       if (!collides(rotated, piece.x + k, piece.y)){
         piece.shape = rotated;
         piece.x += k;
@@ -256,7 +168,6 @@
     }
   }
 
-  // ===== 移動 =====
   function move(dx){
     if (!piece || gameOver) return;
     if (!collides(piece.shape, piece.x + dx, piece.y)){
@@ -265,7 +176,7 @@
     }
   }
 
-  function softDropStep(){
+  function stepDown(){
     if (!piece || gameOver) return;
     if (!collides(piece.shape, piece.x, piece.y + 1)){
       piece.y++;
@@ -277,24 +188,16 @@
 
   function hardDrop(){
     if (!piece || gameOver) return;
-    while (!collides(piece.shape, piece.x, piece.y + 1)){
-      piece.y++;
-    }
+    while (!collides(piece.shape, piece.x, piece.y + 1)) piece.y++;
     lockPiece();
   }
 
-  // ===== 固定とライン消去 =====
   function lockPiece(){
-    for (let y = 0; y < piece.shape.length; y++){
-      for (let x = 0; x < piece.shape[y].length; x++){
+    for (var y=0;y<piece.shape.length;y++){
+      for (var x=0;x<piece.shape[y].length;x++){
         if (!piece.shape[y][x]) continue;
-        const by = piece.y + y;
-        const bx = piece.x + x;
-        if (by < 0) {
-          gameOver = true;
-          showGameOver();
-          return;
-        }
+        var by = piece.y + y, bx = piece.x + x;
+        if (by < 0){ gameOver = true; showGameOver(); return; }
         board[by][bx] = piece.type;
       }
     }
@@ -304,213 +207,173 @@
   }
 
   function clearLines(){
-    let cleared = 0;
-    for (let y = ROWS - 1; y >= 0; y--){
-      if (board[y].every(cell => cell !== null)){
-        board.splice(y, 1);
-        board.unshift(new Array(COLS).fill(null));
+    var cleared = 0;
+    for (var y=ROWS-1;y>=0;y--){
+      var full = true;
+      for (var x=0;x<COLS;x++){ if (!board[y][x]){ full=false; break; } }
+      if (full){
+        board.splice(y,1);
+        var row = [];
+        for (var i=0;i<COLS;i++) row.push(null);
+        board.unshift(row);
         cleared++;
-        y++; // 同じ行を再チェック
+        y++;
       }
     }
-    if (cleared > 0){
+    if (cleared>0){
       linesCleared += cleared;
-      const points = [0, 100, 300, 500, 800];
-      score += points[cleared] || 800;
+      var pts = [0,100,300,500,800];
+      score += pts[cleared] || 800;
       scoreEl.textContent = score;
       linesEl.textContent = linesCleared;
     }
   }
 
-  // ===== 描画 =====
   function draw(){
     ctx.fillStyle = '#000';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillRect(0,0,canvas.width,canvas.height);
 
-    // グリッド
     ctx.strokeStyle = '#1a1a1a';
     ctx.lineWidth = 1;
-    for (let x = 1; x < COLS; x++){
-      ctx.beginPath();
-      ctx.moveTo(x * blockSize, 0);
-      ctx.lineTo(x * blockSize, canvas.height);
-      ctx.stroke();
+    for (var x=1;x<COLS;x++){
+      ctx.beginPath(); ctx.moveTo(x*blockSize,0);
+      ctx.lineTo(x*blockSize,canvas.height); ctx.stroke();
     }
-    for (let y = 1; y < ROWS; y++){
-      ctx.beginPath();
-      ctx.moveTo(0, y * blockSize);
-      ctx.lineTo(canvas.width, y * blockSize);
-      ctx.stroke();
+    for (var y=1;y<ROWS;y++){
+      ctx.beginPath(); ctx.moveTo(0,y*blockSize);
+      ctx.lineTo(canvas.width,y*blockSize); ctx.stroke();
     }
 
-    // 盤面
-    for (let y = 0; y < ROWS; y++){
-      for (let x = 0; x < COLS; x++){
-        const t = board[y][x];
-        if (t) drawBlock(x, y, COLORS[t]);
+    for (var yy=0;yy<ROWS;yy++){
+      for (var xx=0;xx<COLS;xx++){
+        var t = board[yy][xx];
+        if (t) drawBlock(xx,yy,COLORS[t]);
       }
     }
 
-    // 操作中ミノ
     if (piece && !gameOver){
-      for (let y = 0; y < piece.shape.length; y++){
-        for (let x = 0; x < piece.shape[y].length; x++){
-          if (piece.shape[y][x]){
-            const by = piece.y + y;
-            if (by >= 0) drawBlock(piece.x + x, by, COLORS[piece.type]);
+      for (var py=0;py<piece.shape.length;py++){
+        for (var px=0;px<piece.shape[py].length;px++){
+          if (piece.shape[py][px]){
+            var by = piece.y + py;
+            if (by >= 0) drawBlock(piece.x + px, by, COLORS[piece.type]);
           }
         }
       }
     }
   }
 
-  function drawBlock(x, y, color){
-    const px = x * blockSize;
-    const py = y * blockSize;
+  function drawBlock(x,y,color){
+    var px = x*blockSize, py = y*blockSize;
     ctx.fillStyle = color;
-    ctx.fillRect(px + 1, py + 1, blockSize - 2, blockSize - 2);
-    // ハイライト
+    ctx.fillRect(px+1,py+1,blockSize-2,blockSize-2);
     ctx.fillStyle = 'rgba(255,255,255,0.25)';
-    ctx.fillRect(px + 1, py + 1, blockSize - 2, 3);
+    ctx.fillRect(px+1,py+1,blockSize-2,3);
     ctx.fillStyle = 'rgba(0,0,0,0.25)';
-    ctx.fillRect(px + 1, py + blockSize - 4, blockSize - 2, 3);
+    ctx.fillRect(px+1,py+blockSize-4,blockSize-2,3);
   }
 
-  // ===== ゲームループ =====
   function update(time){
-    if (gameOver){
-      lastTime = time;
-      requestAnimationFrame(update);
-      return;
-    }
-    const dt = time - lastTime;
+    if (!lastTime) lastTime = time;
+    var dt = time - lastTime;
     lastTime = time;
 
-    // 通常落下
-    dropTimer += dt;
-    const interval = softDropActive ? 50 : dropInterval;
-    if (dropTimer >= interval){
-      dropTimer = 0;
-      softDropStep();
+    if (!gameOver){
+      dropTimer += dt;
+      var interval = softDrop ? 50 : dropInterval;
+      if (dropTimer >= interval){
+        dropTimer = 0;
+        stepDown();
+      }
     }
-
     requestAnimationFrame(update);
   }
 
-  // ===== タッチ操作 =====
-  let touchStartX = 0;
-  let touchStartY = 0;
-  let touchStartTime = 0;
-  let moved = false;
-  let lastMoveX = 0;
-  let swipeThreshold = 24;
-  let tapThreshold = 10;
-  let tapDuration = 250;
+  // タッチ操作
+  var startX=0, startY=0, startT=0, lastX=0, moved=false;
+  var SWIPE = 24, TAP = 10, TAP_MS = 250;
 
   canvas.addEventListener('touchstart', function(e){
     e.preventDefault();
-    const t = e.changedTouches[0];
-    touchStartX = t.clientX;
-    touchStartY = t.clientY;
-    lastMoveX = touchStartX;
-    touchStartTime = Date.now();
+    var t = e.changedTouches[0];
+    startX = lastX = t.clientX;
+    startY = t.clientY;
+    startT = Date.now();
     moved = false;
-    softDropActive = false;
-  }, {passive: false});
+    softDrop = false;
+  }, {passive:false});
 
   canvas.addEventListener('touchmove', function(e){
     e.preventDefault();
     if (gameOver) return;
-    const t = e.changedTouches[0];
-    const dx = t.clientX - lastMoveX;
-    const dy = t.clientY - touchStartY;
-
-    // 横スライド（一定量ごとに1マス）
-    if (Math.abs(dx) > swipeThreshold){
-      const dir = dx > 0 ? 1 : -1;
-      move(dir);
-      lastMoveX = t.clientX;
+    var t = e.changedTouches[0];
+    var dx = t.clientX - lastX;
+    var dy = t.clientY - startY;
+    if (Math.abs(dx) > SWIPE){
+      move(dx>0 ? 1 : -1);
+      lastX = t.clientX;
       moved = true;
     }
-
-    // 下スライド → ソフトドロップ
-    if (dy > swipeThreshold * 1.5){
-      softDropActive = true;
-      moved = true;
-    } else {
-      softDropActive = false;
-    }
-  }, {passive: false});
+    if (dy > SWIPE*1.5){ softDrop = true; moved = true; }
+    else softDrop = false;
+  }, {passive:false});
 
   canvas.addEventListener('touchend', function(e){
     e.preventDefault();
-    if (gameOver){
-      softDropActive = false;
-      return;
-    }
-    const t = e.changedTouches[0];
-    const dx = t.clientX - touchStartX;
-    const dy = t.clientY - touchStartY;
-    const dt = Date.now() - touchStartTime;
+    if (gameOver){ softDrop = false; return; }
+    var t = e.changedTouches[0];
+    var dx = t.clientX - startX;
+    var dy = t.clientY - startY;
+    var dt = Date.now() - startT;
 
-    // 上スライド → ハードドロップ
-    if (dy < -swipeThreshold * 2 && Math.abs(dx) < Math.abs(dy)){
+    if (dy < -SWIPE*2 && Math.abs(dx) < Math.abs(dy)){
       hardDrop();
-    } else if (!moved && Math.abs(dx) < tapThreshold && Math.abs(dy) < tapThreshold && dt < tapDuration){
-      // タップ：画面左半分＝左回転、右半分＝右回転
-      const rect = canvas.getBoundingClientRect();
-      const x = t.clientX - rect.left;
-      if (x < rect.width / 2){
-        tryRotate(-1);
-      } else {
-        tryRotate(1);
-      }
+    } else if (!moved && Math.abs(dx) < TAP && Math.abs(dy) < TAP && dt < TAP_MS){
+      var rect = canvas.getBoundingClientRect();
+      var x = t.clientX - rect.left;
+      if (x < rect.width/2) tryRotate(-1);
+      else tryRotate(1);
     }
-    softDropActive = false;
-  }, {passive: false});
+    softDrop = false;
+  }, {passive:false});
 
-  // マウスでも一応動くように（PC確認用）
+  // PC用
   canvas.addEventListener('mousedown', function(e){
     if (gameOver) return;
-    const rect = canvas.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    if (x < rect.width / 2) tryRotate(-1);
+    var rect = canvas.getBoundingClientRect();
+    var x = e.clientX - rect.left;
+    if (x < rect.width/2) tryRotate(-1);
     else tryRotate(1);
   });
 
-  // ===== ゲームオーバー =====
   function showGameOver(){
-    msgTextEl.textContent = 'GAME OVER\nSCORE: ' + score;
+    msgTextEl.textContent = 'GAME OVER  SCORE:' + score;
     msgEl.style.display = 'flex';
   }
 
   function restart(){
     initBoard();
-    score = 0;
-    linesCleared = 0;
+    score = 0; linesCleared = 0;
     scoreEl.textContent = '0';
     linesEl.textContent = '0';
     gameOver = false;
-    dropTimer = 0;
-    softDropActive = false;
-    nextPieceType = randomType();
+    dropTimer = 0; lastTime = 0;
+    softDrop = false;
+    nextType = randomType();
     spawn();
     msgEl.style.display = 'none';
     draw();
   }
 
   restartBtn.addEventListener('click', restart);
-
-  // ===== 開始 =====
   window.addEventListener('resize', resize);
+
   resize();
   initBoard();
-  nextPieceType = randomType();
+  nextType = randomType();
   spawn();
   draw();
-  lastTime = performance.now();
   requestAnimationFrame(update);
-
 })();
 </script>
 </body>
